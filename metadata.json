@@ -1,0 +1,5 @@
+{
+  "name": "NBT Studio Web",
+  "description": "專業的網頁版 NBT (Named Binary Tag) 編輯器。支援多檔案分頁、樹狀結構編輯、GZIP 壓縮與搜尋功能。",
+  "requestFramePermissions": []
+}
