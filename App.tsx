@@ -2,11 +2,13 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { NBTParser, NBTWriter } from './utils/nbtParser';
 import { NBTFile, NBTTag, TagType } from './types';
 import { NBTNode } from './components/NBTNode';
+import { PlayerPreview } from './components/PlayerPreview';
 import { deleteNodesByPaths, flattenTree, cloneTag } from './utils/treeUtils';
 import { 
     FileUp, Save, X, Box, Search, 
     ChevronsDown, ChevronsUp, FolderOpen, FolderClosed, 
-    Trash2, RotateCcw, RotateCw, CheckSquare, Square, Info
+    Trash2, RotateCcw, RotateCw, CheckSquare, Square, Info,
+    User
 } from 'lucide-react';
 
 type ExpandSignal = {
@@ -26,6 +28,9 @@ const App: React.FC = () => {
   
   // Expansion Signal
   const [expandSignal, setExpandSignal] = useState<ExpandSignal>({ id: 0, type: 'expand_all' });
+  
+  // Preview Modal State
+  const [showPreview, setShowPreview] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const activeFile = files.find(f => f.id === activeFileId);
@@ -237,6 +242,8 @@ const App: React.FC = () => {
         {/* Left Vertical Sidebar */}
         {activeFile && (
             <div className="w-12 bg-gray-900 border-r border-gray-800 flex flex-col items-center py-4 gap-2 shrink-0 overflow-y-auto scrollbar-hide">
+                <SidebarBtn icon={<User size={20} />} title="玩家預覽" onClick={() => setShowPreview(true)} />
+                <div className="w-6 h-px bg-gray-700 my-1"></div>
                 <SidebarBtn icon={<ChevronsDown size={20} />} title="全部展開" onClick={() => triggerExpand('expand_all')} />
                 <SidebarBtn icon={<ChevronsUp size={20} />} title="全部摺疊" onClick={() => triggerExpand('collapse_all')} />
                 <div className="w-6 h-px bg-gray-700 my-1"></div>
@@ -260,7 +267,7 @@ const App: React.FC = () => {
                     <NBTNode 
                         tag={activeFile.root} depth={0} path="root"
                         onUpdate={(newRoot) => updateActiveFileRoot(newRoot)}
-                        onDelete={() => { if(confirm("無法刪除根目錄。")) closeFile(React.MouseEvent as any, activeFile.id); }}
+                        onDelete={() => { if(confirm("無法刪除根目錄。")) closeFile({ stopPropagation: () => {} } as any, activeFile.id); }}
                         onAdd={() => {}}
                         searchTerm={searchTerm}
                         selectedPaths={selectedPaths}
@@ -282,6 +289,11 @@ const App: React.FC = () => {
       <footer className="h-6 bg-gray-900 border-t border-gray-800 flex items-center justify-end px-4 text-[10px] text-gray-500 select-none shrink-0 z-20 font-mono">
         <span>由幽影櫻製作 by barian</span>
       </footer>
+
+      {/* Preview Modal */}
+      {showPreview && activeFile && (
+        <PlayerPreview root={activeFile.root} onClose={() => setShowPreview(false)} />
+      )}
     </div>
   );
 };
