@@ -94,24 +94,65 @@ export const NBTNode: React.FC<NBTNodeProps> = ({
   const handleToggle = () => setIsExpanded(!isExpanded);
 
   const handleSave = () => {
+    // Trim whitespace for numeric parsing to prevent errors (e.g. " 7000" or "7000 ")
+    const valTrimmed = editValue.trim();
     let newValue: any = editValue;
+    
     try {
         switch (tag.type) {
-            case TagType.Byte: case TagType.Short: case TagType.Int:
-                newValue = parseInt(editValue);
-                if (isNaN(newValue)) throw new Error("無效的整數");
+            case TagType.Byte: {
+                const v = parseInt(valTrimmed);
+                if (isNaN(v)) throw new Error("並非有效的整數");
+                if (v < -128 || v > 127) throw new Error("超出 Byte 範圍 (-128 ~ 127)");
+                newValue = v;
                 break;
-            case TagType.Long: newValue = BigInt(editValue); break;
-            case TagType.Float: case TagType.Double:
-                newValue = parseFloat(editValue);
-                if (isNaN(newValue)) throw new Error("無效的浮點數");
+            }
+            case TagType.Short: {
+                const v = parseInt(valTrimmed);
+                if (isNaN(v)) throw new Error("並非有效的整數");
+                if (v < -32768 || v > 32767) throw new Error("超出 Short 範圍 (-32768 ~ 32767)");
+                newValue = v;
                 break;
-            case TagType.String: newValue = editValue; break;
+            }
+            case TagType.Int: {
+                const v = parseInt(valTrimmed);
+                if (isNaN(v)) throw new Error("並非有效的整數");
+                newValue = v;
+                break;
+            }
+            case TagType.Long: {
+                try {
+                    // BigInt is strict, spaces or decimals will crash it.
+                    newValue = BigInt(valTrimmed);
+                } catch (e) {
+                    throw new Error("無效的 Long (長整數) 格式。請確保沒有小數點或非法字元。");
+                }
+                break;
+            }
+            case TagType.Float:
+            case TagType.Double: {
+                const v = parseFloat(valTrimmed);
+                if (isNaN(v)) throw new Error("無效的浮點數");
+                newValue = v;
+                break;
+            }
+            case TagType.String:
+                newValue = editValue; // Keep original formatting for strings (don't trim)
+                break;
+            case TagType.ByteArray:
+            case TagType.IntArray:
+            case TagType.LongArray:
+                throw new Error("請使用展開視圖編輯陣列元素，無法直接編輯原始字串。");
         }
-        onUpdate({ ...tag, name: editName, value: newValue });
+
+        // IMPORTANT: If the tag is inside a List, its name MUST remain null.
+        // Assigning a string (even empty "") to a list item violates NBT structure.
+        const finalName = tag.name === null ? null : editName;
+
+        onUpdate({ ...tag, name: finalName, value: newValue });
         setIsEditing(false);
     } catch (e) {
-        alert("格式錯誤");
+        alert(`儲存失敗: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
@@ -137,12 +178,12 @@ export const NBTNode: React.FC<NBTNodeProps> = ({
 
   // Recursion handlers (Update, Delete, Add) are same as before but need to pass down new props
   const handleChildUpdate = (index: number, updatedChild: NBTTag) => {
-    const newValue = [...tag.value];
     if (tag.type === TagType.List) {
         const newList = [...tag.value.list];
         newList[index] = updatedChild;
         onUpdate({ ...tag, value: { ...tag.value, list: newList }});
     } else if (tag.type === TagType.Compound) {
+        const newValue = [...tag.value];
         newValue[index] = updatedChild;
         onUpdate({ ...tag, value: newValue });
     }
