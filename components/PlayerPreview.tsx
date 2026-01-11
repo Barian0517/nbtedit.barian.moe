@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { NBTTag, TagType } from '../types';
-import { X, Shield, Heart, Zap, Drumstick, Gem } from 'lucide-react';
+import { X, Shield, Heart, Zap, Drumstick, Gem, Archive, Download } from 'lucide-react';
 
 interface PlayerPreviewProps {
   root: NBTTag;
@@ -111,7 +111,17 @@ export const PlayerPreview: React.FC<PlayerPreviewProps> = ({ root, onClose }) =
       else if (item.slot >= 9 && item.slot <= 35) inventory[item.slot - 9] = item;
     });
 
-    // 4. Curios 解析邏輯 (修正版)
+    // 4. Ender Chest 解析
+    const enderItemsTag = findTag(root, 'EnderItems');
+    const enderRawItems = parseItems(enderItemsTag);
+    const enderInventory: Item[] = new Array(27).fill(null);
+    enderRawItems.forEach(item => {
+        if (item.slot !== undefined && item.slot >= 0 && item.slot < 27) {
+            enderInventory[item.slot] = item;
+        }
+    });
+
+    // 5. Curios 解析邏輯 (修正版)
     const curiosItems: { identifier: string, items: Item[] }[] = [];
     const forgeCaps = findTag(root, 'ForgeCaps');
 
@@ -147,8 +157,51 @@ export const PlayerPreview: React.FC<PlayerPreviewProps> = ({ root, onClose }) =
         }
     }
 
-    return { health, maxHealth, food, xp, armor, inventory, hotbar, offhand, curiosItems };
+    return { health, maxHealth, food, xp, armor, inventory, hotbar, offhand, enderInventory, curiosItems };
   }, [root]);
+
+  const handleExportJson = () => {
+    const cleanItem = (i: Item | null | undefined) => {
+        if (!i || i.id === 'air' || i.id === 'minecraft:air') return null;
+        return i;
+    };
+
+    const exportData = {
+        generated_at: new Date().toISOString(),
+        stats: {
+            health: parsedData.health,
+            max_health: parsedData.maxHealth,
+            food_level: parsedData.food,
+            xp_level: parsedData.xp
+        },
+        inventory: {
+            armor: Object.values(parsedData.armor).map(cleanItem).filter(Boolean),
+            offhand: cleanItem(parsedData.offhand),
+            hotbar: parsedData.hotbar.map(cleanItem).filter(Boolean),
+            main_inventory: parsedData.inventory.map(cleanItem).filter(Boolean),
+        },
+        ender_chest: parsedData.enderInventory.map(cleanItem).filter(Boolean),
+        curios: parsedData.curiosItems
+    };
+
+    const jsonString = JSON.stringify(exportData, (key, value) => {
+        // Handle BigInt serialization
+        if (typeof value === 'bigint') {
+            return value.toString();
+        }
+        return value;
+    }, 2);
+
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `player_data_export_${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -178,32 +231,61 @@ export const PlayerPreview: React.FC<PlayerPreviewProps> = ({ root, onClose }) =
         {/* Content */}
         <div className="p-6 overflow-y-auto grid grid-cols-1 md:grid-cols-12 gap-6 custom-scrollbar">
           
-          {/* Left Column: Armor & Offhand */}
-          <div className="md:col-span-2 flex flex-col items-center gap-4 bg-gray-900/40 p-4 rounded-lg border border-gray-700/50 h-fit">
-            <h3 className="text-gray-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-2 flex items-center gap-1">
-               <Shield size={12} /> 裝備
-            </h3>
-            <div className="flex flex-col gap-2">
-              <ItemSlot item={parsedData.armor[103]} label="頭" />
-              <ItemSlot item={parsedData.armor[102]} label="身" />
-              <ItemSlot item={parsedData.armor[101]} label="腿" />
-              <ItemSlot item={parsedData.armor[100]} label="腳" />
+          {/* Left Column: Armor & Offhand + Export */}
+          <div className="md:col-span-2 flex flex-col items-center bg-gray-900/40 p-4 rounded-lg border border-gray-700/50 h-full justify-between">
+            <div className="flex flex-col items-center gap-4 w-full">
+                <h3 className="text-gray-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-2 flex items-center gap-1">
+                   <Shield size={12} /> 裝備
+                </h3>
+                <div className="flex flex-col gap-2">
+                  <ItemSlot item={parsedData.armor[103]} label="頭" />
+                  <ItemSlot item={parsedData.armor[102]} label="身" />
+                  <ItemSlot item={parsedData.armor[101]} label="腿" />
+                  <ItemSlot item={parsedData.armor[100]} label="腳" />
+                </div>
+                <div className="w-8 h-px bg-gray-700 my-1"></div>
+                <ItemSlot item={parsedData.offhand} label="副手" />
             </div>
-            <div className="w-8 h-px bg-gray-700 my-1"></div>
-            <ItemSlot item={parsedData.offhand} label="副手" />
+
+            {/* Export Button */}
+            <div className="w-full pt-6">
+                <button 
+                    onClick={handleExportJson}
+                    className="w-full flex items-center justify-center gap-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 border border-blue-500/30 hover:border-blue-400 rounded py-2 text-xs font-bold transition-all"
+                    title="匯出所有物品 NBT 資料"
+                >
+                    <Download size={14} /> 匯出 JSON
+                </button>
+            </div>
           </div>
 
-          {/* Center Column: Inventory */}
+          {/* Center Column: Inventory & Ender Chest */}
           <div className="md:col-span-7 flex flex-col items-center bg-gray-900/40 p-4 rounded-lg border border-gray-700/50 h-fit">
              <h3 className="text-gray-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-4 w-full text-left">物品欄</h3>
+             
+             {/* Main Inventory */}
              <div className="grid grid-cols-9 gap-1 mb-4">
                 {parsedData.inventory.map((item, idx) => (
                     <ItemSlot key={`inv-${idx}`} item={item} />
                 ))}
              </div>
+             
+             {/* Hotbar */}
              <div className="grid grid-cols-9 gap-1">
                 {parsedData.hotbar.map((item, idx) => (
                     <ItemSlot key={`hot-${idx}`} item={item} />
+                ))}
+             </div>
+
+             {/* Ender Chest Section */}
+             <div className="w-full h-px bg-gray-700/50 my-6"></div>
+             
+             <h3 className="text-emerald-400 text-[10px] font-bold uppercase tracking-[0.2em] mb-4 w-full text-left flex items-center gap-2">
+                <Archive size={12} /> 終界箱 (Ender Chest)
+             </h3>
+             <div className="grid grid-cols-9 gap-1">
+                {parsedData.enderInventory.map((item, idx) => (
+                    <ItemSlot key={`ender-${idx}`} item={item} />
                 ))}
              </div>
           </div>
@@ -215,7 +297,7 @@ export const PlayerPreview: React.FC<PlayerPreviewProps> = ({ root, onClose }) =
              </h3>
              
              {parsedData.curiosItems.length > 0 ? (
-                 <div className="flex flex-col gap-4 overflow-y-visible pr-1 custom-scrollbar max-h-[500px]">
+                 <div className="flex flex-col gap-4 overflow-y-visible pr-1 custom-scrollbar max-h-[600px]">
                     {parsedData.curiosItems.map((curio, idx) => (
                         <div key={idx} className="bg-gray-800/30 p-2 rounded border border-gray-700/50 relative">
                             <div className="text-[9px] text-purple-300 mb-2 font-mono uppercase tracking-widest flex justify-between items-center border-b border-purple-900/30 pb-1">
